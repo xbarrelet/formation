@@ -18,22 +18,19 @@ from sklearn.preprocessing import StandardScaler
 from statsmodels.formula.api import ols
 
 
-
+DETAILED_OUTPUT_MODE = False
 DATA_FILEPATH = 'resources/products.csv'
 
 TARGET_COLUMN = "nutrition_grade_fr"
-# No nutrition-score-fr_100g because it has as many missing value as the nutrigrade_fr
+# No nutrition-score-fr_100g because it's roughly the same as the nutrigrade_fr
 CONSIDERED_COLUMNS = ["product_name", "nutrition_grade_fr", "energy_100g", "proteins_100g", "carbohydrates_100g",
                       "sugars_100g", "fat_100g"]
-
 
 # Configuration
 pd.set_option('display.max_rows', None)
 pd.set_option('display.max_columns', None)
 sns.set_theme()
 pd.set_option("future.no_silent_downcasting", True)
-
-DEBUG_MODE = True
 
 
 def get_dtype(column_name: str) -> str:
@@ -113,7 +110,7 @@ def display_information_missing_values_and_produces_plot(df: DataFrame, filename
     print(present_data_percentages)
     print("\n")
 
-    plot = msno.bar(df)
+    plot = msno.bar(df, figsize=(15, 18))
     save_plot(plot, filename, "missing_values")
 
 
@@ -146,7 +143,7 @@ def get_the_outliers_values(column_name: str, df: DataFrame,
     outliers_values = extract_outliers_values(filtered_dataframe, percentage_defining_outliers)
     outliers_dataframe = df[df[column_name].isin(outliers_values)].sort_values(by=column_name,
                                                                                ascending=False)
-    if DEBUG_MODE:
+    if DETAILED_OUTPUT_MODE:
         print(f"Here are the outliers in the column:{column_name}\n")
         print(outliers_dataframe[['product_name', column_name]])
         print("\n")
@@ -155,50 +152,54 @@ def get_the_outliers_values(column_name: str, df: DataFrame,
 
 
 def extract_outliers_values(filtered_dataframe: DataFrame, percentage_defining_outliers: float) -> DataFrame:
-    first_quartile = filtered_dataframe.quantile(percentage_defining_outliers)
-    third_quartile = filtered_dataframe.quantile(1 - percentage_defining_outliers)
-    interquartile_range = third_quartile - first_quartile
-    mask = ((filtered_dataframe < first_quartile - 1.5 * interquartile_range) |
-            (filtered_dataframe > third_quartile + 1.5 * interquartile_range))
+    first_quantile = filtered_dataframe.quantile(percentage_defining_outliers)
+    last_quantile = filtered_dataframe.quantile(1 - percentage_defining_outliers)
+    interquantile_range = last_quantile - first_quantile
+    mask = ((filtered_dataframe < first_quantile - 1.5 * interquantile_range) |
+            (filtered_dataframe > last_quantile + 1.5 * interquantile_range))
 
     return filtered_dataframe[mask]
 
 
 def input_missing_values(df: DataFrame, column_to_fill: str) -> DataFrame:
-    if DEBUG_MODE:
+    if DETAILED_OUTPUT_MODE:
         present_values = df[df[column_to_fill].notna()]
         print(f"Count of values before imputation: {present_values[column_to_fill].count()}")
         print("\n")
-        missing_values_index = df[df[column_to_fill].na().index]
+        # missing_values_index = df[df[column_to_fill].isna()].index
 
-    iterative_imputer = IterativeImputer(random_state=0, estimator=RandomForestRegressor(), max_iter=25, tol=0.1)
+    iterative_imputer = IterativeImputer(estimator=RandomForestRegressor())
 
     new_dataframe: DataFrame = df.copy()
-    new_dataframe[TARGET_COLUMN] = new_dataframe[TARGET_COLUMN].replace("a", 1).replace("b", 2).replace("c", 3).replace("d", 4).replace("e", 5)
+    new_dataframe[TARGET_COLUMN] = (new_dataframe[TARGET_COLUMN]
+                                    .replace("a", 1).replace("b", 2).replace("c", 3).replace("d", 4).replace("e", 5))
 
-    new_dataframe[column_to_fill] = iterative_imputer.fit_transform(new_dataframe[column_to_fill].values.reshape(-1, 1))[:, 0]
-    new_dataframe[TARGET_COLUMN] = new_dataframe[TARGET_COLUMN].replace(1, "a", ).replace(2, "b").replace(3, "c").replace(4, "d").replace(5, "e")
+    new_dataframe[column_to_fill] = iterative_imputer.fit_transform(
+        new_dataframe[column_to_fill].values.reshape(-1, 1))[:, 0]
+    new_dataframe[TARGET_COLUMN] = (new_dataframe[TARGET_COLUMN]
+                                    .replace(1, "a").replace(2, "b").replace(3, "c").replace(4, "d").replace(5, "e"))
+    create_nutrition_grade_pieplot(df, "univariate_analysis/nutrition_grade_pieplot_after_imputation.png")
 
-    if DEBUG_MODE:
+    if DETAILED_OUTPUT_MODE:
         present_values_after_inputation = new_dataframe[new_dataframe[column_to_fill].notna()]
         print(f"Count of values after imputation: {present_values_after_inputation[column_to_fill].count()}")
         print("\n")
-        print("Values with imputed values:\n")
-        print(DataFrame(new_dataframe, index=missing_values_index.index, columns=['product_name', column_to_fill]))
+        # print("Rows with imputed values:\n")
+        # print(DataFrame(new_dataframe, index=missing_values_index, columns=['product_name', column_to_fill]))
 
     return new_dataframe
 
 
 def remove_values_outside_ranges(df: DataFrame) -> DataFrame:
-    if DEBUG_MODE:
+    if DETAILED_OUTPUT_MODE:
         print(f"Starting to clean the rows with values outside of the normal ranges\n")
 
     for column_name in df.columns:
-        if DEBUG_MODE:
+        if DETAILED_OUTPUT_MODE:
             print(f"{column_name}: before:{len(df)}")
 
         if column_name == "energy_100g":
-            df = df[(df[column_name] >= 0) & (df[column_name] <= 20000)]
+            df = df[(df[column_name] >= 0) & (df[column_name] <= 3765.6)]
         elif column_name.endswith("_100g"):
             df = df[(df[column_name] >= 0) & (df[column_name] <= 100)]
         elif column_name == "nutrition_grade_fr":
@@ -206,11 +207,11 @@ def remove_values_outside_ranges(df: DataFrame) -> DataFrame:
         elif column_name == "product_name":
             df = df[df[column_name].notna()]
 
-        if DEBUG_MODE:
+        if DETAILED_OUTPUT_MODE:
             print(f"{column_name}: after:{len(df)}")
 
     df = df[(df["proteins_100g"] + df['carbohydrates_100g'] + df['sugars_100g'] + df['fat_100g'] <= 100)]
-    if DEBUG_MODE:
+    if DETAILED_OUTPUT_MODE:
         print(f"\nAfter cleaning the rows when the sum of the components > 100gr: {len(df)}\n"
               f"Cleaning based on the ranges of values is now done.\n")
 
@@ -218,50 +219,52 @@ def remove_values_outside_ranges(df: DataFrame) -> DataFrame:
 
 
 def remove_outliers_values(df: DataFrame) -> DataFrame:
-    if DEBUG_MODE:
+    if DETAILED_OUTPUT_MODE:
         print("Cleaning the outliers values\n")
 
     for column_name in df.columns:
         if column_name == "proteins_100g":
-            outliers_dataframe = get_the_outliers_values(column_name, df, percentage_defining_outliers=0.001)
+            outliers_dataframe = get_the_outliers_values(column_name, df, percentage_defining_outliers=0.007)
             df = df.drop(outliers_dataframe.index)
         elif column_name == "sugars_100g":
-            outliers_dataframe = get_the_outliers_values(column_name, df, percentage_defining_outliers=0.02)
+            outliers_dataframe = get_the_outliers_values(column_name, df, percentage_defining_outliers=0.011)
             df = df.drop(outliers_dataframe.index)
 
-    if DEBUG_MODE:
+    if DETAILED_OUTPUT_MODE:
         print("Outliers values have been removed\n")
 
     return df
 
 
-def save_univariate_analysis_plot(df: DataFrame, step: str, plot_types: list[str] = ['boxplot']) -> None:
+def save_univariate_analysis_plot(df: DataFrame, step: str, plot_types: list[str] = ['boxplot'],
+                                  prefix: str = "univariate_analysis") -> None:
     for column_name in df.columns:
         if column_name.endswith("_100g"):
             if "boxplot" in plot_types:
-                boxplot = sns.boxplot(data=df, x=column_name).set_title(f"Boxplot of {column_name} {step}")
-                save_plot(boxplot, f"{column_name}_{step}_boxplot", "univariate_analysis")
+                boxplot = (sns.boxplot(data=df, x=column_name)
+                           .set_title(f"Boxplot of {column_name} {step}".replace("_", " ")))
+                save_plot(boxplot, f"{column_name}_{step}_boxplot", prefix)
 
             if "histogram" in plot_types:
-                histogram = sns.histplot(data=df, x=column_name, kde=False).set_title(
-                    f"Histogram of {column_name} {step}")
-                save_plot(histogram, f"{column_name}_{step}_histogram", "univariate_analysis")
+                histogram = (sns.histplot(data=df, x=column_name, kde=False)
+                             .set_title(f"Histogram of {column_name} {step}".replace("_", " ")))
+                save_plot(histogram, f"{column_name}_{step}_histogram", prefix)
 
-    # create_nutrigrade_pieplot(df)
+    create_nutrition_grade_pieplot(df, f"{prefix}/nutrition_grade_pieplot.png")
 
 
-def create_nutrigrade_pieplot(df):
-    print("Pieplot now")
-    quantitative_df = df.replace("a", 1).replace("b", 2).replace("c", 3).replace("d", 4).replace("e", 5).dropna()
-    print("df prepared")
-    pieplot = quantitative_df.plot.pie(y='nutrition_grade_fr', figsize=(5, 5))
-    print("plot saved")
-    plt.show()
-    # colors = sns.color_palette('pastel')[0:5]
-    # plt.pie(quantitative_df, colors=colors, autopct='%.0f%%')
-    # plt.savefig(f"plots/univariate_analysis/{column_name}_{step}_pie.png")
-    # plt.close()
-    print("pieplot done")
+def create_nutrition_grade_pieplot(df: DataFrame, filename: str) -> None:
+    data = [df['nutrition_grade_fr'].value_counts()['a'],
+            df['nutrition_grade_fr'].value_counts()['b'],
+            df['nutrition_grade_fr'].value_counts()['c'],
+            df['nutrition_grade_fr'].value_counts()['d'],
+            df['nutrition_grade_fr'].value_counts()['e']]
+    labels = ['a', 'b', 'c', 'd', 'e']
+
+    colors = sns.color_palette('pastel')[0:5]
+    plt.pie(data, labels=labels, colors=colors, autopct='%.0f%%')
+    plt.savefig(f"plots/{filename}")
+    plt.close()
 
 
 def clean_dataset(df: DataFrame) -> DataFrame:
@@ -273,7 +276,7 @@ def clean_dataset(df: DataFrame) -> DataFrame:
     save_univariate_analysis_plot(df, "after_cleaning_values_outside_ranges")
     df = remove_outliers_values(df)
 
-    save_univariate_analysis_plot(df, "after_cleaning_outliers_values", plot_types=['boxplot', 'histogram'])
+    save_univariate_analysis_plot(df, "after_cleaning", plot_types=['boxplot', 'histogram'])
     print(f"Size after the cleaning:{len(df)}\n")
 
     return df
@@ -294,8 +297,8 @@ def perform_bivariate_analysis(df, is_after_imputation=False):
                        .set_title(f"Bivariate analysis of {column_name}"))
             save_plot(boxplot, f"{column_name}_boxplot", plot_prefix_path)
 
-            scatterplot = sns.scatterplot(data=df, x=df[TARGET_COLUMN], y=column_name)
-            save_plot(scatterplot, f"{column_name}_scatterplot", plot_prefix_path)
+            stripplot = sns.stripplot(data=df, x=TARGET_COLUMN, y=column_name, order=['a', 'b', 'c', 'd', 'e'])
+            save_plot(stripplot, f"{column_name}_stripplot", plot_prefix_path)
 
             violin_plot = sns.violinplot(data=df, x=df[TARGET_COLUMN], y=column_name, order=order)
             save_plot(violin_plot, f"{column_name}_violinplot", plot_prefix_path)
@@ -306,15 +309,17 @@ def perform_bivariate_analysis(df, is_after_imputation=False):
 def create_heatmap(df: DataFrame, plot_prefix_path: str):
     quantitative_df = (df.drop(columns=["product_name"])
                        .replace("a", 1).replace("b", 2).replace("c", 3).replace("d", 4).replace("e", 5))
-    corr = quantitative_df.corr()
+    matrix = quantitative_df.corr().round(2)
 
-    mask = np.triu(np.ones_like(corr, dtype=bool))
-    plt.subplots(figsize=(11, 9))
+    plt.subplots(figsize=(13, 11))
     cmap = sns.diverging_palette(230, 20, as_cmap=True)
-    # heatmap = sns.heatmap(corr, mask=mask, cmap=cmap, vmax=.3, center=0, square=True, linewidths=.5,
-    heatmap = sns.heatmap(corr, mask=mask, cmap=cmap, square=True, linewidths=.5, cbar_kws={"shrink": .5})
+
+    # To only display the lower half of the matrix
+    mask = np.triu(np.ones_like(matrix, dtype=bool))
+    heatmap = sns.heatmap(matrix, cmap=cmap, mask=mask, square=True, linewidths=.5, cbar_kws={"shrink": .5})
+
+    # heatmap = sns.heatmap(matrix, cmap=cmap, square=True, linewidths=.5, cbar_kws={"shrink": .5})
     save_plot(heatmap, f"heatmap", plot_prefix_path)
-    # TODO: La diagonale devrait etre a 1
 
 
 def perform_acp_analysis(df, is_after_imputation):
@@ -333,7 +338,7 @@ def perform_acp_analysis(df, is_after_imputation):
 
     create_inertia_plot(pca, x_list, plots_prefix_path)
 
-    if DEBUG_MODE:
+    if DETAILED_OUTPUT_MODE:
         print("The components of the PCA are:")
         pcs = pd.DataFrame(pca.components_)
         pcs.columns = features
@@ -383,9 +388,11 @@ def create_inertia_plot(pca, x_list, plots_prefix_path):
 
     plt.bar(x_list, inertia_percentages)
     plt.plot(x_list, cumulative_inertia_percentages, c="red", marker='o')
+
     plt.xlabel("rang de l'axe d'inertie")
     plt.ylabel("pourcentage d'inertie")
     plt.title("Eboulis des valeurs propres")
+
     plt.savefig(f"plots/{plots_prefix_path}/eboulis_des_valeurs_propres.png")
     plt.close()
 
@@ -394,21 +401,22 @@ def perform_anova_analysis(df):
     for column in df.columns:
         if column.endswith("_100g"):
             print(f"\n\nanalysis of column:{column}")
-            result = rp.summary_cont(df[column].groupby(df[TARGET_COLUMN]))
-            print(result)
-            print("\n")
+
+            if DETAILED_OUTPUT_MODE:
+                result = rp.summary_cont(df[column].groupby(df[TARGET_COLUMN]))
+                print(result)
+                print("\n")
 
             model = ols(f'{column} ~ C({TARGET_COLUMN})', data=df).fit()
             # print(model.summary())
             # print("\n")
             aov_table = sm.stats.anova_lm(model, typ=2)
             print(aov_table)
-            # https://www.pythonfordatascience.org/anova-python/
 
 
 def perform_multivaried_analysis(df: DataFrame, is_after_imputation=False) -> None:
     perform_acp_analysis(df, is_after_imputation)
-    # perform_anova_analysis(df)
+    perform_anova_analysis(df)
 
 
 if __name__ == '__main__':
@@ -427,17 +435,16 @@ if __name__ == '__main__':
     perform_bivariate_analysis(cleaned_dataframe)
     perform_multivaried_analysis(cleaned_dataframe)
 
-    print("Analysis done, let's input the missing values\n")
+    print("\nAnalysis done, let's input the missing values\n")
 
     filled_dataframe: DataFrame = input_missing_values(cleaned_dataframe, TARGET_COLUMN)
+
     display_information_missing_values_and_produces_plot(filled_dataframe, "missing_values_after_imputation")
+    save_univariate_analysis_plot(filled_dataframe, "after_imputation", plot_types=['boxplot', 'histogram'],
+                                  prefix="univariate_analysis_after_imputation")
     perform_bivariate_analysis(cleaned_dataframe, is_after_imputation=True)
     perform_multivaried_analysis(cleaned_dataframe, is_after_imputation=True)
 
-    print("All done, have a nice day!")
-
-    # Tu peux enumerer une ou deux methodes de plus pour suggestions meme si dans ton cas cest pas utile vu les 150k de lignes restantes, ligne prochaine.
-    # ex: mettre a 0 si manquantes, ou mettre a la place la medianne ou moyenne. Tu pourrais aussi mettre la moyenne par categorie pex pour les valuers manquantes de sodium
-    # ou ici utiliser le fat_100g qui a le plus de correlation avec le nutrigrade pour remplir ses valeurs manquantes.
+    print("\n\nAll done, have a nice day!")
 
     # MAKE SURE ALL TODO ARE DONE
