@@ -408,8 +408,10 @@ def perform_anova_analysis(df):
                 print("\n")
 
             model = ols(f'{column} ~ C({TARGET_COLUMN})', data=df).fit()
-            # print(model.summary())
-            # print("\n")
+            if DETAILED_OUTPUT_MODE:
+                print(model.summary())
+                print("\n")
+
             aov_table = sm.stats.anova_lm(model, typ=2)
             print(aov_table)
 
@@ -446,5 +448,3 @@ if __name__ == '__main__':
     perform_multivaried_analysis(cleaned_dataframe, is_after_imputation=True)
 
     print("\n\nAll done, have a nice day!")
-
-    # MAKE SURE ALL TODO ARE DONE
