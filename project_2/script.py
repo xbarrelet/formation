@@ -178,8 +178,6 @@ def input_missing_values(df: DataFrame, column_to_fill: str) -> DataFrame:
         new_dataframe[column_to_fill].values.reshape(-1, 1))[:, 0]
     new_dataframe[TARGET_COLUMN] = (new_dataframe[TARGET_COLUMN]
                                     .replace(1, "a").replace(2, "b").replace(3, "c").replace(4, "d").replace(5, "e"))
-    create_nutrition_grade_pieplot(df, "univariate_analysis/nutrition_grade_pieplot_after_imputation.png")
-
     if DETAILED_OUTPUT_MODE:
         present_values_after_inputation = new_dataframe[new_dataframe[column_to_fill].notna()]
         print(f"Count of values after imputation: {present_values_after_inputation[column_to_fill].count()}")
@@ -241,13 +239,15 @@ def save_univariate_analysis_plot(df: DataFrame, step: str, plot_types: list[str
     for column_name in df.columns:
         if column_name.endswith("_100g"):
             if "boxplot" in plot_types:
-                boxplot = (sns.boxplot(data=df, x=column_name)
+                boxplot = (sns.boxplot(data=df, x=column_name, showmeans=True)
                            .set_title(f"Boxplot of {column_name} {step}".replace("_", " ")))
                 save_plot(boxplot, f"{column_name}_{step}_boxplot", prefix)
 
             if "histogram" in plot_types:
+                plt.figure(figsize=(7, 5))
                 histogram = (sns.histplot(data=df, x=column_name, kde=False)
                              .set_title(f"Histogram of {column_name} {step}".replace("_", " ")))
+                plt.axvline(x=df[column_name].median(), linewidth=3, color='y', label="median", alpha=0.5)
                 save_plot(histogram, f"{column_name}_{step}_histogram", prefix)
 
     create_nutrition_grade_pieplot(df, f"{prefix}/nutrition_grade_pieplot.png")
@@ -273,10 +273,10 @@ def clean_dataset(df: DataFrame) -> DataFrame:
     save_univariate_analysis_plot(df, "before_cleaning")
     df = remove_values_outside_ranges(df)
 
-    save_univariate_analysis_plot(df, "after_cleaning_values_outside_ranges")
+    # save_univariate_analysis_plot(df, "after_cleaning_values_outside_ranges")
     df = remove_outliers_values(df)
 
-    save_univariate_analysis_plot(df, "after_cleaning", plot_types=['boxplot', 'histogram'])
+    # save_univariate_analysis_plot(df, "after_cleaning", plot_types=['boxplot', 'histogram'])
     print(f"Size after the cleaning:{len(df)}\n")
 
     return df
@@ -293,7 +293,7 @@ def perform_bivariate_analysis(df, is_after_imputation=False):
 
     for column_name in df.columns:
         if column_name.endswith("_100g"):
-            boxplot = (sns.boxplot(data=df, x=df[TARGET_COLUMN], y=column_name, order=order)
+            boxplot = (sns.boxplot(data=df, x=df[TARGET_COLUMN], y=column_name, order=order, showmeans=True)
                        .set_title(f"Bivariate analysis of {column_name}"))
             save_plot(boxplot, f"{column_name}_boxplot", plot_prefix_path)
 
@@ -434,15 +434,15 @@ if __name__ == '__main__':
 
     print("The dataset has been cleaned, starting bivariate and multivaried analysis\n")
 
-    perform_bivariate_analysis(cleaned_dataframe)
-    perform_multivaried_analysis(cleaned_dataframe)
+    # perform_bivariate_analysis(cleaned_dataframe)
+    # perform_multivaried_analysis(cleaned_dataframe)
 
     print("\nAnalysis done, let's input the missing values\n")
 
     filled_dataframe: DataFrame = input_missing_values(cleaned_dataframe, TARGET_COLUMN)
 
     display_information_missing_values_and_produces_plot(filled_dataframe, "missing_values_after_imputation")
-    save_univariate_analysis_plot(filled_dataframe, "after_imputation", plot_types=['boxplot', 'histogram'],
+    save_univariate_analysis_plot(filled_dataframe, "after_cleaning_and_imputation", plot_types=['boxplot', 'histogram'],
                                   prefix="univariate_analysis_after_imputation")
     perform_bivariate_analysis(cleaned_dataframe, is_after_imputation=True)
     perform_multivaried_analysis(cleaned_dataframe, is_after_imputation=True)
